@@ -27,7 +27,7 @@ ui <- fluidPage(
           column(4,
           checkboxInput("scalepts","Autoscale Points?",value=T)),
           column(8,
-          sliderInput("pointcex","Manual point scale",min=.1,max=20,value=3,step=.2)
+          sliderInput("pointcex","Manual point scale",min=.05,max=20,value=3,step=.2)
             )
       )
       ),
@@ -36,16 +36,23 @@ ui <- fluidPage(
       # Show a vizualization
       mainPanel(
          plotOutput("viz",height=600),
-        verbatimTextOutput("string")
+        downloadButton("down",label="Download Plot")
       )
    )
 )
 
-# Define server logic required to draw a histogram
+
+
+
+ #--------------------------------------------------------
+# Define server logic 
 server <- function(input, output) {
    #Render input sliders that actually respect min/max values
-   output$numero<-renderUI({
-     numericInput(inputId = "k", label = "How many?", min = 1, max = 1e9,value=1)
+   
+  G<-reactiveValues() #Used to access graph outside renderPlot
+  
+  output$numero<-renderUI({
+     numericInput(inputId = "k", label = "How many?", min = 1, max = 1e9,value=55)
    })
    
    
@@ -57,7 +64,9 @@ server <- function(input, output) {
      N <- input$numba
      k<- input$k
      #Autoscale vs Manual point scaling
-     if(input$scalepts==F){pts<-input$pointcex}else{pts=20*exp(-.0025*N)+.1}
+     if(input$scalepts==F){pts<-input$pointcex}else{
+            #slightly different models for pt size before &after 9999
+           if(N>9999){pts=30*exp(-.006*N)+.01}else{pts=20*exp(-.002*N)+.5} }
      
      root<-sqrt(N)
      lim<-ceiling(root) #What's the nearest integer length of root N
@@ -73,6 +82,7 @@ server <- function(input, output) {
      #If How many>0, add red dots
      if(k>0){g<-g+geom_point(data=d[1:k,],aes(x=x,y=y),col="#F71735",pch=19,cex=pts*1)}
      
+     #####The tricky part: if N>100k
      if(N>1000000){
        binmagnitude<-round(log10(N))-3
        g <- g+stat_summary_2d()
@@ -81,8 +91,16 @@ server <- function(input, output) {
      warn<-ifelse(k>N,"  *Improper Fraction*","")
      ttl<-substitute( paste(frac(k,N),warn),list(k=format(k, big.mark=",", scientific=FALSE),N=format(N, big.mark=",", scientific=FALSE),warn=warn))
      
-     g+ ggtitle(ttl)+theme(plot.title = element_text(hjust = 0.5,size=34,face="bold",colour="#011627",family="serif"))
-   })
+     g<-g+ ggtitle(ttl)+theme(plot.title = element_text(hjust = 0.5,size=34,face="bold",colour="#011627",family="serif"))#,plot.background = element_rect(colour = '#011627',size=1)
+     G$plot<-g #assign reactive value
+     g
+   })#end renderPlot
+   
+   output$down<-downloadHandler("vizN.jpeg",
+     content=function(file){
+       ggsave(file,plot=G$plot,width=8,height=9)
+       }
+   )
 }
 
 # Run the application 
